@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  app:
+    build: .
+    container_name: gemini_ui_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://admin:adminpassword@db:5432/gemini_ui?schema=public
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
+      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NODE_ENV=production
+    depends_on:
+      - db
+
   db:
     image: postgres:15
     container_name: gemini_ui_db
