@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -87,7 +86,7 @@ model UserSettings {
   topP             Float    @default(0.9)
   topK             Int      @default(40)
   systemInstruction String? // Domyślna persona/prompt systemowy
-  modelName         String   @default("gemini-flash-latest")
+  modelName         String   @default("gemini-2.5-flash")
   useGrounding      Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
