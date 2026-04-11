@@ -44,6 +44,7 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 # Kopiuj wygenerowany klient Prisma (wymagany przez aplikację)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # Zainstaluj Prisma CLI globalnie (potrzebne do db push w entrypoint)
 RUN npm install -g prisma
