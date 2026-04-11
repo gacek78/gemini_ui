@@ -3,32 +3,38 @@ version: '3.8'
 services:
   app:
     build: .
-    container_name: gemini_ui_app
+    container_name: gemini_ui
     restart: always
     ports:
       - "3001:3000"
     environment:
-      - DATABASE_URL=postgresql://admin:adminpassword@db:5432/gemini_ui?schema=public
+      - DATABASE_URL=${DATABASE_URL}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
       - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
       - NODE_ENV=production
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:15
     container_name: gemini_ui_db
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: adminpassword
-      POSTGRES_DB: gemini_ui
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-gemini_ui}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-gemini_ui}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
