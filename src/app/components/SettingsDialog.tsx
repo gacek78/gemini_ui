@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings, X, Save, Key, Sliders, Info, Sparkles, Sun, Moon, Laptop } from "lucide-react";
+import { Settings, X, Save, Key, Sliders, Info, Sparkles, Sun, Moon, Laptop, Globe } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -22,6 +22,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
   const [modelName, setModelName] = useState("gemini-2.5-flash");
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("system");
   const [systemInstruction, setSystemInstruction] = useState("");
+  const [useGrounding, setUseGrounding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
 
@@ -40,6 +41,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
             setMaxOutputTokens(data.maxOutputTokens || 2048);
             setModelName(data.modelName || "gemini-2.5-flash");
             setSystemInstruction(data.systemInstruction || "");
+            setUseGrounding(data.useGrounding || false);
           }
         });
     }
@@ -78,6 +80,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
           maxOutputTokens,
           modelName,
           systemInstruction,
+          useGrounding,
         }),
       });
 
@@ -152,7 +155,34 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
               />
             </div>
-            <div className="space-y-2">
+            {/* Grounding Toggle Section */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                <Globe className="h-4 w-4 text-blue-500" />
+                Wyszukiwarka Google (Grounding)
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setUseGrounding(!useGrounding)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                    useGrounding ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-700"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                      useGrounding ? "translate-x-5" : "translate-x-0"
+                    )}
+                  />
+                </button>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Uziemienie w Google Search (tylko dla płatnych kluczy)
+                </span>
+              </div>
+            </div>
+          </div>
               <label className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 Max Tokens: <span className="font-mono text-blue-600 dark:text-blue-400">{maxOutputTokens}</span>
               </label>

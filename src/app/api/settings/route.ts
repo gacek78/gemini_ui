@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { apiKey, temperature, maxOutputTokens, topP, topK, systemInstruction, modelName } = await req.json();
+    const { apiKey, temperature, maxOutputTokens, topP, topK, systemInstruction, modelName, useGrounding } = await req.json();
 
     const data: any = {
       userId: session.user.id,
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       topK: topK !== undefined ? parseInt(topK) : 40,
       systemInstruction: systemInstruction || null,
       modelName: modelName || "gemini-2.5-flash",
+      useGrounding: useGrounding !== undefined ? Boolean(useGrounding) : false,
     };
 
     if (apiKey) {

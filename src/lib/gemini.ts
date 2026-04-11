@@ -3,11 +3,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 /**
  * Inicjalizuje i zwraca instancję modelu Gemini.
  */
-export function getGeminiModel(apiKey: string, modelName: string = 'gemini-flash-latest', systemInstruction?: string) {
+export function getGeminiModel(apiKey: string, modelName: string = 'gemini-flash-latest', systemInstruction?: string, useGrounding: boolean = false) {
   const genAI = new GoogleGenerativeAI(apiKey);
+  
+  const tools = useGrounding ? [{ google_search: {} }] as any : undefined;
+
   return genAI.getGenerativeModel({ 
     model: modelName,
     systemInstruction: systemInstruction ? { role: 'system', parts: [{ text: systemInstruction }] } : undefined,
+    tools,
   });
 }
 

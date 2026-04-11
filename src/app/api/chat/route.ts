@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
       model = getGeminiModel(
         apiKey,
         modelName,
-        userSettings.systemInstruction || undefined
+        userSettings.systemInstruction || undefined,
+        (userSettings as any).useGrounding || false
       );
 
       // Szybki test czy model istnieje (Gemini SDK nie waliduje przy getGenerativeModel, ale przy pierwszym użyciu)
@@ -60,9 +61,12 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error(`[Chat API] Error initializing model ${modelName}:`, err);
       // Fallback natychmiastowy
-      modelName = "gemini-2.0-flash";
-      console.log(`[Chat API] Falling back to: ${modelName}`);
-      model = getGeminiModel(apiKey, modelName, userSettings.systemInstruction || undefined);
+      model = getGeminiModel(
+        apiKey, 
+        modelName, 
+        userSettings.systemInstruction || undefined,
+        (userSettings as any).useGrounding || false
+      );
     }
 
     // Ostatnia wiadomość od użytkownika (ta która właśnie przyszła)
@@ -128,7 +132,12 @@ export async function POST(req: NextRequest) {
       // Jeśli to błąd modelu (np. 404), spróbuj modelem zapasowym (gemini-2.0-flash)
       if (modelName !== "gemini-2.0-flash") {
         console.log("[Chat API] Attempting fallback to gemini-2.0-flash...");
-        const fallbackModel = getGeminiModel(apiKey, "gemini-2.0-flash", userSettings.systemInstruction || undefined);
+        const fallbackModel = getGeminiModel(
+          apiKey, 
+          "gemini-2.0-flash", 
+          userSettings.systemInstruction || undefined,
+          (userSettings as any).useGrounding || false
+        );
         const fallbackChat = fallbackModel.startChat({
           history: formatHistory(dbMessages),
           generationConfig: {

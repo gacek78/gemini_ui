@@ -87,6 +87,7 @@ model UserSettings {
   topK             Int      @default(40)
   systemInstruction String? // Domyślna persona/prompt systemowy
   modelName         String   @default("gemini-flash-latest")
+  useGrounding      Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
