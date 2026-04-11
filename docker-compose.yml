@@ -6,7 +6,7 @@ services:
     container_name: gemini_ui_app
     restart: always
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - DATABASE_URL=postgresql://admin:adminpassword@db:5432/gemini_ui?schema=public
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
