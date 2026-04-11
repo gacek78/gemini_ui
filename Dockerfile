@@ -41,12 +41,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
-# Kopiuj Prisma CLI i WSZYSTKIE wymagane moduły (w tym pliki WASM)
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-COPY --from=builder /app/node_modules/.bin/prisma_schema_build_bg.wasm ./node_modules/.bin/prisma_schema_build_bg.wasm
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Kopiuj wygenerowany klient Prisma (wymagany przez aplikację)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Zainstaluj Prisma CLI globalnie (potrzebne do db push w entrypoint)
+RUN npm install -g prisma
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
