@@ -182,7 +182,8 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
                 </span>
               </div>
             </div>
-          </div>
+
+            <div className="space-y-2">
               <label className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 Max Tokens: <span className="font-mono text-blue-600 dark:text-blue-400">{maxOutputTokens}</span>
               </label>
