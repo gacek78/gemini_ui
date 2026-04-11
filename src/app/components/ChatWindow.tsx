@@ -129,39 +129,54 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
       setMessages((prev) => [...prev, assistantMessage]);
 
       if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const text = new TextDecoder().decode(value);
-          
-          if (text.startsWith("__METADATA__:")) {
-            try {
-               const metaStr = text.replace("__METADATA__:", "").split('\n')[0].trim();
-               const metadata = JSON.parse(metaStr);
-               assistantMessage.metadata = metadata;
-               setMessages((prev: any) => {
-                 const newMessages = [...prev];
-                 newMessages[newMessages.length - 1].metadata = metadata;
-                 return newMessages;
-               });
-               continue;
-            } catch (e) {
-               console.error("Metadata parse error", e);
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const text = new TextDecoder().decode(value);
+            
+            // Obsługa metadanych uziemienia (jeśli są)
+            if (text.startsWith("__METADATA__:")) {
+              try {
+                 const metaStr = text.replace("__METADATA__:", "").split('\n')[0].trim();
+                 const metadata = JSON.parse(metaStr);
+                 assistantMessage.metadata = metadata;
+                 setMessages((prev: any) => {
+                   const newMessages = [...prev];
+                   newMessages[newMessages.length - 1].metadata = metadata;
+                   return newMessages;
+                 });
+                 continue;
+              } catch (e) {
+                 console.error("Metadata parse error", e);
+              }
             }
-          }
 
-          assistantContent += text;
-          
-          setMessages((prev: any) => {
-            const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = {
-                ...newMessages[newMessages.length - 1],
-                role: "model",
-                content: assistantContent
-            };
-            return newMessages;
-          });
+            // Jeśli serwer zwrócił błąd JSON zamiast tekstu strumienia (np. 500 po starcie start())
+            if (text.startsWith('{"error":')) {
+              try {
+                const errorData = JSON.parse(text);
+                throw new Error(errorData.error || "Server error during stream");
+              } catch (e) {
+                // Not a valid JSON error, treat as text
+              }
+            }
+
+            assistantContent += text;
+            
+            setMessages((prev: any) => {
+              const newMessages = [...prev];
+              newMessages[newMessages.length - 1] = {
+                  ...newMessages[newMessages.length - 1],
+                  role: "model",
+                  content: assistantContent
+              };
+              return newMessages;
+            });
+          }
+        } finally {
+          reader.releaseLock();
         }
       }
     } catch (error: any) {

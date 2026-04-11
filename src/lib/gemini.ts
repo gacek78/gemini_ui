@@ -8,12 +8,6 @@ export function getGeminiModel(apiKey: string, modelName: string = 'gemini-flash
   return genAI.getGenerativeModel({ 
     model: modelName,
     systemInstruction: systemInstruction ? { role: 'system', parts: [{ text: systemInstruction }] } : undefined,
-    // Dodanie narzędzia uziemienia (Google Search)
-    tools: [
-      {
-        google_search: {},
-      },
-    ] as any,
   });
 }
 

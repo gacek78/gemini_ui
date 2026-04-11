@@ -43,13 +43,27 @@ export async function POST(req: NextRequest) {
     // Odszyfruj klucz API
     const apiKey = decryptKey(userSettings.encryptedApiKey);
 
-    // Inicjalizacja modelu z uwzględnieniem Persony/Instrukcji systemowej
-    const modelName = (userSettings as any)?.modelName || "gemini-flash-latest";
-    const model = getGeminiModel(
-      apiKey,
-      modelName,
-      userSettings.systemInstruction || undefined
-    );
+    // Odczyt modelu z ustawień
+    let modelName = (userSettings as any)?.modelName || "gemini-2.5-flash";
+    console.log(`[Chat API] Using primary model: ${modelName} for user ${session.user.id}`);
+
+    let model;
+    try {
+      model = getGeminiModel(
+        apiKey,
+        modelName,
+        userSettings.systemInstruction || undefined
+      );
+
+      // Szybki test czy model istnieje (Gemini SDK nie waliduje przy getGenerativeModel, ale przy pierwszym użyciu)
+      // W przypadku błędu 404 niżej w try/catch obsłużymy to jako sygnał do fallbacku.
+    } catch (err) {
+      console.error(`[Chat API] Error initializing model ${modelName}:`, err);
+      // Fallback natychmiastowy
+      modelName = "gemini-2.0-flash";
+      console.log(`[Chat API] Falling back to: ${modelName}`);
+      model = getGeminiModel(apiKey, modelName, userSettings.systemInstruction || undefined);
+    }
 
     // Ostatnia wiadomość od użytkownika (ta która właśnie przyszła)
     const lastMessage = messages[messages.length - 1];
@@ -104,8 +118,29 @@ export async function POST(req: NextRequest) {
     }
     promptParts.push({ text: lastMessage.content });
 
-    // Strumieniowanie odpowiedzi
-    const result = await chat.sendMessageStream(promptParts);
+    // Strumieniowanie odpowiedzi z obsługą błędów modeli
+    let result;
+    try {
+      result = await chat.sendMessageStream(promptParts);
+    } catch (err: any) {
+      console.error(`[Chat API] Error sending message with ${modelName}:`, err);
+      
+      // Jeśli to błąd modelu (np. 404), spróbuj modelem zapasowym (gemini-2.0-flash)
+      if (modelName !== "gemini-2.0-flash") {
+        console.log("[Chat API] Attempting fallback to gemini-2.0-flash...");
+        const fallbackModel = getGeminiModel(apiKey, "gemini-2.0-flash", userSettings.systemInstruction || undefined);
+        const fallbackChat = fallbackModel.startChat({
+          history: formatHistory(dbMessages),
+          generationConfig: {
+            temperature: userSettings.temperature,
+            maxOutputTokens: userSettings.maxOutputTokens,
+          },
+        });
+        result = await fallbackChat.sendMessageStream(promptParts);
+      } else {
+        throw err; // Jeśli to już był model zapasowy, wyrzuć błąd dalej
+      }
+    }
 
     const stream = new ReadableStream({
       async start(controller) {

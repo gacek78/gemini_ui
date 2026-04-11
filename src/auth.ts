@@ -16,11 +16,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: { label: "Email", type: "email", placeholder: "test@example.com" },
         },
         async authorize(credentials: any) {
-          if (credentials?.email === "test@example.com") {
-            let user = await prisma.user.findUnique({ where: { email: "test@example.com" } });
+          if (credentials?.email === "test@example.com" || credentials?.email === "gacek78@gmail.com") {
+            const email = credentials.email;
+            let user = await prisma.user.findUnique({ where: { email } });
             if (!user) {
               user = await prisma.user.create({
-                data: { email: "test@example.com", name: "Tester" },
+                data: { 
+                  email, 
+                  name: email === "gacek78@gmail.com" ? "Gacek" : "Tester" 
+                },
               });
             }
             return user;
