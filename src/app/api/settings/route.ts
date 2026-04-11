@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       topP: topP !== undefined ? parseFloat(topP) : 0.9,
       topK: topK !== undefined ? parseInt(topK) : 40,
       systemInstruction: systemInstruction || null,
-      modelName: modelName || "gemini-2.0-flash",
+      modelName: modelName || "gemini-2.5-flash",
     };
 
     if (apiKey) {

@@ -19,7 +19,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
   const [apiKey, setApiKey] = useState("");
   const [temperature, setTemperature] = useState(0.7);
   const [maxOutputTokens, setMaxOutputTokens] = useState(2048);
-  const [modelName, setModelName] = useState("gemini-1.5-flash");
+  const [modelName, setModelName] = useState("gemini-2.5-flash");
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("system");
   const [systemInstruction, setSystemInstruction] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
           if (data && !data.error) {
             setTemperature(data.temperature || 0.7);
             setMaxOutputTokens(data.maxOutputTokens || 2048);
-            setModelName(data.modelName || "gemini-1.5-flash");
+            setModelName(data.modelName || "gemini-2.5-flash");
             setSystemInstruction(data.systemInstruction || "");
           }
         });
@@ -177,10 +177,10 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
               >
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemini-2.0-pro-exp-02-05">Gemini 2.0 Pro</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash ⚡ (polecany)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro 🧠 (najinteligentniejszy)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite 💨 (najtańszy)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (stary)</option>
               </select>
             </div>
 
