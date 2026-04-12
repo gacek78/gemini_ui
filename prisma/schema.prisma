@@ -77,25 +77,26 @@ model Authenticator {
 }
 
 model UserSettings {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  encryptedApiKey  String?  // Własny klucz API użytkownika zabezpieczony AES
-  temperature      Float    @default(0.7)
-  maxOutputTokens  Int      @default(2048)
-  topP             Float    @default(0.9)
-  topK             Int      @default(40)
-  systemInstruction String? // Domyślna persona/prompt systemowy
-  modelName         String   @default("gemini-2.5-flash")
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedApiKey   String?  // Własny klucz API użytkownika zabezpieczony AES
+  temperature       Float    @default(0.7)
+  maxOutputTokens   Int      @default(2048)
+  topP              Float    @default(0.9)
+  topK              Int      @default(40)
+  systemInstruction String?  // Domyślna persona/prompt systemowy
+  modelName         String   @default("gemini-3-flash-preview")
   useGrounding      Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Conversation {
   id        String    @id @default(uuid())
   title     String    @default("Nowa rozmowa")
   isPinned  Boolean   @default(false)
+  summary   String?   // Rolling summary starszych wiadomości (generowany automatycznie)
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime  @default(now())

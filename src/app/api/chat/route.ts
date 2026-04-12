@@ -3,6 +3,60 @@ import { prisma } from "@/lib/prisma";
 import { decryptKey } from "@/lib/encryption";
 import { getGeminiModel, formatHistory } from "@/lib/gemini";
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Ile ostatnich wiadomości dosyłamy do modelu (poza podsumowaniem)
+const HISTORY_WINDOW = 20;
+// Po ilu wiadomościach generujemy podsumowanie
+const SUMMARY_THRESHOLD = 20;
+
+/**
+ * Generuje podsumowanie starszych wiadomości przy użyciu Gemini.
+ * Używa gemini-3-flash-preview z maxOutputTokens=1024 — tanio i szybko.
+ */
+async function generateSummary(
+  apiKey: string,
+  previousSummary: string | null,
+  messages: any[]
+): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+  const historyText = messages
+    .map((m) => {
+      let content = m.content;
+      try {
+        const p = JSON.parse(content);
+        if (p.text) content = p.text;
+      } catch {}
+      return `${m.role === "user" ? "Użytkownik" : "Asystent"}: ${content}`;
+    })
+    .join("\n");
+
+  const prompt = previousSummary
+    ? `Masz poprzednie podsumowanie rozmowy oraz nowe wiadomości. Zaktualizuj podsumowanie, łącząc oba. Zachowaj wszystkie ważne fakty, ustalenia, kontekst i preferencje użytkownika. Bądź zwięzły (max 500 słów).
+
+Poprzednie podsumowanie:
+${previousSummary}
+
+Nowe wiadomości:
+${historyText}
+
+Zaktualizowane podsumowanie:`
+    : `Streść poniższą rozmowę w zwięzły sposób (max 500 słów). Zachowaj wszystkie ważne fakty, ustalenia, kontekst i preferencje użytkownika.
+
+Rozmowa:
+${historyText}
+
+Podsumowanie:`;
+
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
+  });
+
+  return result.response.text().trim();
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -29,26 +83,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const dbMessagesRaw = await prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
-    const dbMessages = dbMessagesRaw.reverse();
-
     const apiKey = decryptKey(userSettings.encryptedApiKey);
-    let modelName = (userSettings as any)?.modelName || "gemini-2.5-flash";
-    console.log(`[Chat API] Using model: ${modelName} for user ${session.user.id}`);
+    let modelName = (userSettings as any)?.modelName || "gemini-3-flash-preview";
 
-    const model = getGeminiModel(
-      apiKey,
-      modelName,
-      userSettings.systemInstruction || undefined,
-      (userSettings as any).useGrounding || false
-    );
+    // Pobierz konwersację wraz z podsumowaniem
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { summary: true },
+    });
 
+    // Pobierz wszystkie wiadomości z bazy (potrzebujemy count + okno)
+    const allDbMessages = await prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const totalMessages = allDbMessages.length;
+
+    // Sprawdź czy osiągnęliśmy próg — jeśli tak, wygeneruj podsumowanie ze starszych wiadomości
+    // Podsumowujemy wszystko POZA ostatnimi HISTORY_WINDOW wiadomościami
+    let currentSummary = conversation?.summary || null;
+    const olderMessages = totalMessages > HISTORY_WINDOW
+      ? allDbMessages.slice(0, totalMessages - HISTORY_WINDOW)
+      : [];
+
+    const needsSummaryUpdate =
+      olderMessages.length > 0 &&
+      olderMessages.length % SUMMARY_THRESHOLD === 0;
+
+    if (needsSummaryUpdate) {
+      console.log(`[Chat] Generating rolling summary for conversation ${conversationId} (${olderMessages.length} older messages)`);
+      try {
+        currentSummary = await generateSummary(apiKey, currentSummary, olderMessages);
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { summary: currentSummary },
+        });
+        console.log(`[Chat] Summary updated successfully.`);
+      } catch (e) {
+        console.error("[Chat] Failed to generate summary:", e);
+        // Nie przerywamy — kontynuujemy bez aktualizacji podsumowania
+      }
+    }
+
+    // Okno historii — ostatnie HISTORY_WINDOW wiadomości
+    const recentMessages = allDbMessages.slice(-HISTORY_WINDOW);
+
+    // Zapisz nową wiadomość użytkownika
     const lastMessage = messages[messages.length - 1];
-
     const dbContent = lastMessage.image
       ? JSON.stringify({ text: lastMessage.content, image: lastMessage.image })
       : lastMessage.content;
@@ -57,19 +139,42 @@ export async function POST(req: NextRequest) {
       data: { conversationId, role: "user", content: dbContent },
     });
 
-    const messageCount = await prisma.message.count({ where: { conversationId } });
-    if (messageCount === 1) {
-      const newTitle =
-        lastMessage.content.slice(0, 40) +
-        (lastMessage.content.length > 40 ? "..." : "");
+    // Tytuł rozmowy przy pierwszej wiadomości
+    if (totalMessages === 0) {
+      const newTitle = lastMessage.content.slice(0, 40) + (lastMessage.content.length > 40 ? "..." : "");
       await prisma.conversation.update({
         where: { id: conversationId },
         data: { title: newTitle },
       });
     }
 
+    // Zbuduj historię do wysłania: [podsumowanie jako system msg] + [ostatnie 20]
+    const historyForModel = formatHistory(recentMessages);
+
+    // Jeśli mamy podsumowanie, dodaj je jako pierwszą wiadomość w historii (user+model ping)
+    // Gemini API wymaga naprzemiennych ról user/model, dlatego używamy pary
+    if (currentSummary) {
+      historyForModel.unshift(
+        {
+          role: "user" as const,
+          parts: [{ text: `[Podsumowanie wcześniejszej części rozmowy]\n${currentSummary}` }],
+        },
+        {
+          role: "model" as const,
+          parts: [{ text: "Rozumiem. Pamiętam kontekst wcześniejszej rozmowy." }],
+        }
+      );
+    }
+
+    const model = getGeminiModel(
+      apiKey,
+      modelName,
+      userSettings.systemInstruction || undefined,
+      (userSettings as any).useGrounding || false
+    );
+
     const chat = model.startChat({
-      history: formatHistory(dbMessages),
+      history: historyForModel,
       generationConfig: {
         temperature: userSettings.temperature,
         maxOutputTokens: userSettings.maxOutputTokens,
@@ -80,12 +185,7 @@ export async function POST(req: NextRequest) {
 
     const promptParts: any[] = [];
     if (lastMessage.image) {
-      promptParts.push({
-        inlineData: {
-          data: lastMessage.image.data,
-          mimeType: lastMessage.image.mimeType,
-        },
-      });
+      promptParts.push({ inlineData: { data: lastMessage.image.data, mimeType: lastMessage.image.mimeType } });
     }
     promptParts.push({ text: lastMessage.content });
 
@@ -94,23 +194,23 @@ export async function POST(req: NextRequest) {
       result = await chat.sendMessageStream(promptParts);
     } catch (err: any) {
       console.error(`[Chat API] Error sending message with ${modelName}:`, err);
-      if (modelName !== "gemini-2.0-flash") {
-        console.log("[Chat API] Attempting fallback to gemini-2.0-flash...");
+      if (modelName !== "gemini-3-flash-preview") {
+        console.log("[Chat API] Attempting fallback to gemini-3-flash-preview...");
         const fallbackModel = getGeminiModel(
           apiKey,
-          "gemini-2.0-flash",
+          "gemini-3-flash-preview",
           userSettings.systemInstruction || undefined,
           (userSettings as any).useGrounding || false
         );
         const fallbackChat = fallbackModel.startChat({
-          history: formatHistory(dbMessages),
+          history: historyForModel,
           generationConfig: {
             temperature: userSettings.temperature,
             maxOutputTokens: userSettings.maxOutputTokens,
           },
         });
         result = await fallbackChat.sendMessageStream(promptParts);
-        modelName = "gemini-2.0-flash";
+        modelName = "gemini-3-flash-preview";
       } else {
         throw err;
       }
@@ -130,15 +230,10 @@ export async function POST(req: NextRequest) {
 
             if (groundingMetadata) {
               finalGroundingMetadata = groundingMetadata;
-              controller.enqueue(
-                encoder.encode(`__METADATA__:${JSON.stringify(groundingMetadata)}\n`)
-              );
+              controller.enqueue(encoder.encode(`__METADATA__:${JSON.stringify(groundingMetadata)}\n`));
             }
 
-            // usageMetadata pojawia się w ostatnim chunk-u streamu
-            if (chunk.usageMetadata) {
-              finalUsage = chunk.usageMetadata;
-            }
+            if (chunk.usageMetadata) finalUsage = chunk.usageMetadata;
 
             if (chunkText) {
               fullResponse += chunkText;
@@ -146,7 +241,6 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Jeśli chunk nie zawierał usageMetadata, spróbuj z result.response
           if (!finalUsage) {
             try {
               const resp = await result.response;
