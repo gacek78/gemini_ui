@@ -8,6 +8,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import MessageInput from "./MessageInput";
 import CodeBlock from "./CodeBlock";
+import TokenUsageBar from "./TokenUsageBar";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -20,6 +21,13 @@ interface Message {
   metadata?: any;
 }
 
+interface TokenUsage {
+  promptTokenCount: number;
+  candidatesTokenCount: number;
+  totalTokenCount: number;
+  model: string;
+}
+
 interface ChatWindowProps {
   conversationId: string | null;
   onMessageSent: () => void;
@@ -30,12 +38,14 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
   const [isLoading, setIsLoading] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setMessages([]);
+    setTokenUsage(null);
     if (conversationId) {
       fetchMessages();
     }
@@ -52,11 +62,11 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
 
   const handleScroll = () => {
     if (scrollRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-        const offset = 100;
-        const bottom = scrollHeight - scrollTop - clientHeight < offset;
-        isAtBottom.current = bottom;
-        setShowScrollButton(!bottom);
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      const offset = 100;
+      const bottom = scrollHeight - scrollTop - clientHeight < offset;
+      isAtBottom.current = bottom;
+      setShowScrollButton(!bottom);
     }
   };
 
@@ -90,7 +100,10 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
     }
   };
 
-  const handleSendMessage = async (content: string, image?: { data: string; mimeType: string }) => {
+  const handleSendMessage = async (
+    content: string,
+    image?: { data: string; mimeType: string }
+  ) => {
     if (!conversationId) return;
 
     const userMessage: any = { role: "user", content };
@@ -136,8 +149,7 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
 
             let text = new TextDecoder().decode(value);
 
-            // Wyodrębnij i usuń bloki __METADATA__:...\n z tekstu
-            // chunk może zawierać metadata + tekst w tym samym kawałku
+            // Wyodrębnij __METADATA__
             const metaRegex = /__METADATA__:(.+?)\n/g;
             let metaMatch;
             while ((metaMatch = metaRegex.exec(text)) !== null) {
@@ -152,8 +164,20 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
                 console.error("Metadata parse error", e);
               }
             }
-            // Usuń wszystkie linie __METADATA__ z tekstu przed dodaniem do treści
             text = text.replace(/__METADATA__:.+?\n/g, "");
+
+            // Wyodrębnij __TOKENS__
+            const tokenRegex = /__TOKENS__:(.+?)\n/g;
+            let tokenMatch;
+            while ((tokenMatch = tokenRegex.exec(text)) !== null) {
+              try {
+                const usage = JSON.parse(tokenMatch[1]);
+                setTokenUsage(usage);
+              } catch (e) {
+                console.error("Token parse error", e);
+              }
+            }
+            text = text.replace(/__TOKENS__:.+?\n/g, "");
 
             // Obsługa błędu JSON ze streamu
             if (text.startsWith('{"error":')) {
@@ -390,6 +414,7 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
             Zatrzymaj generowanie
           </button>
         )}
+        <TokenUsageBar usage={tokenUsage} />
         <MessageInput onSend={handleSendMessage} disabled={isLoading} />
       </div>
     </div>

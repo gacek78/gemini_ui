@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Messages are required" }, { status: 400 });
     }
 
-    // Pobierz ustawienia użytkownika (w tym zaszyfrowany klucz API)
     const userSettings = await prisma.userSettings.findUnique({
       where: { userId: session.user.id },
     });
@@ -30,66 +29,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Pobierz ostatnie 20 wiadomości (najnowsze najpierw)
     const dbMessagesRaw = await prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: "desc" },
       take: 20,
     });
-
-    // Odwróć, aby były chronologicznie (najstarsze najpierw)
     const dbMessages = dbMessagesRaw.reverse();
 
-    // Odszyfruj klucz API
     const apiKey = decryptKey(userSettings.encryptedApiKey);
-
-    // Odczyt modelu z ustawień
     let modelName = (userSettings as any)?.modelName || "gemini-2.5-flash";
-    console.log(`[Chat API] Using primary model: ${modelName} for user ${session.user.id}`);
+    console.log(`[Chat API] Using model: ${modelName} for user ${session.user.id}`);
 
-    let model;
-    try {
-      model = getGeminiModel(
-        apiKey,
-        modelName,
-        userSettings.systemInstruction || undefined,
-        (userSettings as any).useGrounding || false
-      );
+    const model = getGeminiModel(
+      apiKey,
+      modelName,
+      userSettings.systemInstruction || undefined,
+      (userSettings as any).useGrounding || false
+    );
 
-      // Szybki test czy model istnieje (Gemini SDK nie waliduje przy getGenerativeModel, ale przy pierwszym użyciu)
-      // W przypadku błędu 404 niżej w try/catch obsłużymy to jako sygnał do fallbacku.
-    } catch (err) {
-      console.error(`[Chat API] Error initializing model ${modelName}:`, err);
-      // Fallback natychmiastowy
-      model = getGeminiModel(
-        apiKey, 
-        modelName, 
-        userSettings.systemInstruction || undefined,
-        (userSettings as any).useGrounding || false
-      );
-    }
-
-    // Ostatnia wiadomość od użytkownika (ta która właśnie przyszła)
     const lastMessage = messages[messages.length - 1];
 
-    // 1. Zapisz wiadomość użytkownika w bazie danych (z obsługą obrazów)
-    const dbContent = lastMessage.image 
+    const dbContent = lastMessage.image
       ? JSON.stringify({ text: lastMessage.content, image: lastMessage.image })
       : lastMessage.content;
 
     await prisma.message.create({
-      data: {
-        conversationId,
-        role: "user",
-        content: dbContent,
-      },
+      data: { conversationId, role: "user", content: dbContent },
     });
 
-    // 2. Jeśli to pierwsza wiadomość, zaktualizuj tytuł konwersacji
-    const messageCount = await prisma.message.count({
-      where: { conversationId },
-    });
-
+    const messageCount = await prisma.message.count({ where: { conversationId } });
     if (messageCount === 1) {
       const newTitle = lastMessage.content.slice(0, 40) + (lastMessage.content.length > 40 ? "..." : "");
       await prisma.conversation.update({
@@ -98,11 +66,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Przygotowanie historii dla Gemini (bez tej ostatniej, bo zaraz ją wyślemy w sendMessageStream)
     const chat = model.startChat({
       history: formatHistory(dbMessages),
       generationConfig: {
-// ...
         temperature: userSettings.temperature,
         maxOutputTokens: userSettings.maxOutputTokens,
         topP: userSettings.topP,
@@ -110,7 +76,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Przygotowanie części wiadomości (tekst + opcjonalny obraz)
     const promptParts: any[] = [];
     if (lastMessage.image) {
       promptParts.push({
@@ -122,19 +87,16 @@ export async function POST(req: NextRequest) {
     }
     promptParts.push({ text: lastMessage.content });
 
-    // Strumieniowanie odpowiedzi z obsługą błędów modeli
     let result;
     try {
       result = await chat.sendMessageStream(promptParts);
     } catch (err: any) {
       console.error(`[Chat API] Error sending message with ${modelName}:`, err);
-      
-      // Jeśli to błąd modelu (np. 404), spróbuj modelem zapasowym (gemini-2.0-flash)
       if (modelName !== "gemini-2.0-flash") {
         console.log("[Chat API] Attempting fallback to gemini-2.0-flash...");
         const fallbackModel = getGeminiModel(
-          apiKey, 
-          "gemini-2.0-flash", 
+          apiKey,
+          "gemini-2.0-flash",
           userSettings.systemInstruction || undefined,
           (userSettings as any).useGrounding || false
         );
@@ -146,8 +108,9 @@ export async function POST(req: NextRequest) {
           },
         });
         result = await fallbackChat.sendMessageStream(promptParts);
+        modelName = "gemini-2.0-flash";
       } else {
-        throw err; // Jeśli to już był model zapasowy, wyrzuć błąd dalej
+        throw err;
       }
     }
 
@@ -160,13 +123,10 @@ export async function POST(req: NextRequest) {
 
           for await (const chunk of result.stream) {
             const chunkText = chunk.text();
-            
-            // Sprawdź czy są metadane uziemienia (Grounding Metadata)
             const groundingMetadata = chunk.candidates?.[0]?.groundingMetadata;
-            
+
             if (groundingMetadata) {
               finalGroundingMetadata = groundingMetadata;
-              // Wysyłamy metadane jako specjalny chunk JSON
               controller.enqueue(encoder.encode(`__METADATA__:${JSON.stringify(groundingMetadata)}\n`));
             }
 
@@ -176,21 +136,31 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // 3. Po zakończeniu strumienia, zapisz pełną odpowiedź asystenta (z metadanymi uziemienia)
+          // Pobierz usageMetadata z finalnej odpowiedzi
+          const response = await result.response;
+          const usage = response.usageMetadata;
+          if (usage) {
+            controller.enqueue(
+              encoder.encode(
+                `__TOKENS__:${JSON.stringify({
+                  promptTokenCount: usage.promptTokenCount ?? 0,
+                  candidatesTokenCount: usage.candidatesTokenCount ?? 0,
+                  totalTokenCount: usage.totalTokenCount ?? 0,
+                  model: modelName,
+                })}\n`
+              )
+            );
+          }
+
           if (fullResponse) {
             const assistantDbContent = finalGroundingMetadata
               ? JSON.stringify({ text: fullResponse, metadata: finalGroundingMetadata })
               : fullResponse;
 
             await prisma.message.create({
-              data: {
-                conversationId,
-                role: "model",
-                content: assistantDbContent,
-              },
+              data: { conversationId, role: "model", content: assistantDbContent },
             });
 
-            // Zaktualizuj datę edycji konwersacji, aby wskoczyła na górę listy
             await prisma.conversation.update({
               where: { id: conversationId },
               data: { updatedAt: new Date() },
@@ -199,7 +169,6 @@ export async function POST(req: NextRequest) {
 
           controller.close();
         } catch (error) {
-// ...
           controller.error(error);
         }
       },
