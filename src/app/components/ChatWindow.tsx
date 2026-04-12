@@ -149,7 +149,6 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
 
             let text = new TextDecoder().decode(value);
 
-            // Wyodrębnij __METADATA__
             const metaRegex = /__METADATA__:(.+?)\n/g;
             let metaMatch;
             while ((metaMatch = metaRegex.exec(text)) !== null) {
@@ -166,7 +165,6 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
             }
             text = text.replace(/__METADATA__:.+?\n/g, "");
 
-            // Wyodrębnij __TOKENS__
             const tokenRegex = /__TOKENS__:(.+?)\n/g;
             let tokenMatch;
             while ((tokenMatch = tokenRegex.exec(text)) !== null) {
@@ -179,14 +177,13 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
             }
             text = text.replace(/__TOKENS__:.+?\n/g, "");
 
-            // Obsługa błędu JSON ze streamu
             if (text.startsWith('{"error":')) {
               try {
                 const errorData = JSON.parse(text);
                 throw new Error(errorData.error || "Server error during stream");
               } catch (e: any) {
                 if (e.message !== "Server error during stream") {
-                  // Not valid JSON, treat as text
+                  // Not valid JSON
                 } else {
                   throw e;
                 }
@@ -317,21 +314,8 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
     );
   };
 
-  if (!conversationId) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-10 text-center">
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50 dark:bg-zinc-800/50">
-          <Bot className="h-10 w-10 text-blue-500" />
-        </div>
-        <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Witaj w Gemini UI
-        </h2>
-        <p className="mt-2 max-w-sm text-zinc-500 dark:text-zinc-400">
-          Wybierz rozmowę z bocznego paska lub stwórz nową, aby zacząć.
-        </p>
-      </div>
-    );
-  }
+  // Widok startowy — konwersacja jeszcze ładuje się lub jest pusta
+  const isEmpty = messages.length === 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white dark:bg-black">
@@ -340,59 +324,74 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 py-8 md:px-10"
       >
-        <div className="mx-auto max-w-4xl space-y-8">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex gap-4 group relative",
-                msg.role === "user" ? "flex-row-reverse" : "flex-row"
-              )}
-            >
-              <div
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-zinc-600 transition-all",
-                  msg.role === "user"
-                    ? "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
-                    : "border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20 dark:text-blue-400"
-                )}
-              >
-                {msg.role === "user" ? (
-                  <User className="h-5 w-5" />
-                ) : (
-                  <Bot className="h-5 w-5" />
-                )}
-              </div>
-              <div
-                className={cn(
-                  "prose prose-sm max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed dark:prose-invert relative",
-                  msg.role === "user"
-                    ? "bg-zinc-100 dark:bg-zinc-800"
-                    : "bg-transparent border border-transparent dark:border-transparent"
-                )}
-              >
-                {renderMessageContent(msg)}
-                {msg.role === "model" && msg.content === "" && (
-                  <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
-                )}
-                <button
-                  onClick={() => copyMessage(msg.content, i)}
-                  className={cn(
-                    "absolute -right-10 top-2 p-2 text-zinc-400 opacity-0 transition-opacity hover:text-zinc-600 group-hover:opacity-100 dark:text-zinc-600 dark:hover:text-zinc-400",
-                    msg.role === "user" && "-left-10 right-auto"
-                  )}
-                  title="Kopiuj wiadomość"
-                >
-                  {copiedId === i ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+        {isEmpty ? (
+          // Ekran startowy z polem input wycentrowanym na środku
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 dark:bg-zinc-800/60">
+              <Bot className="h-8 w-8 text-blue-500" />
             </div>
-          ))}
-        </div>
+            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+              W czym mogę Ci pomóc?
+            </h2>
+            <p className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">
+              Napisz wiadomość, aby rozpocząć rozmowę.
+            </p>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-4xl space-y-8">
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "flex gap-4 group relative",
+                  msg.role === "user" ? "flex-row-reverse" : "flex-row"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-zinc-600 transition-all",
+                    msg.role === "user"
+                      ? "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
+                      : "border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/20 dark:text-blue-400"
+                  )}
+                >
+                  {msg.role === "user" ? (
+                    <User className="h-5 w-5" />
+                  ) : (
+                    <Bot className="h-5 w-5" />
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "prose prose-sm max-w-[85%] rounded-2xl px-4 py-3 leading-relaxed dark:prose-invert relative",
+                    msg.role === "user"
+                      ? "bg-zinc-100 dark:bg-zinc-800"
+                      : "bg-transparent border border-transparent dark:border-transparent"
+                  )}
+                >
+                  {renderMessageContent(msg)}
+                  {msg.role === "model" && msg.content === "" && (
+                    <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                  )}
+                  <button
+                    onClick={() => copyMessage(msg.content, i)}
+                    className={cn(
+                      "absolute -right-10 top-2 p-2 text-zinc-400 opacity-0 transition-opacity hover:text-zinc-600 group-hover:opacity-100 dark:text-zinc-600 dark:hover:text-zinc-400",
+                      msg.role === "user" && "-left-10 right-auto"
+                    )}
+                    title="Kopiuj wiadomość"
+                  >
+                    {copiedId === i ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showScrollButton && (
@@ -415,7 +414,7 @@ export default function ChatWindow({ conversationId, onMessageSent }: ChatWindow
           </button>
         )}
         <TokenUsageBar usage={tokenUsage} />
-        <MessageInput onSend={handleSendMessage} disabled={isLoading} />
+        <MessageInput onSend={handleSendMessage} disabled={isLoading || !conversationId} />
       </div>
     </div>
   );

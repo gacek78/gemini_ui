@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import ChatWindow from "./components/ChatWindow";
 import SettingsDialog from "./components/SettingsDialog";
@@ -12,7 +12,7 @@ export default function Home() {
   const [temperature, setTemperature] = useState(0.7);
 
   const handleRefresh = () => setRefreshTrigger((prev) => prev + 1);
-  
+
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/settings");
@@ -23,31 +23,44 @@ export default function Home() {
     } catch (e) {}
   };
 
-  React.useEffect(() => {
+  // Utwórz nową konwersację automatycznie przy starcie
+  const createNewConversation = async () => {
+    try {
+      const res = await fetch("/api/conversations", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedConversationId(data.id);
+        handleRefresh();
+      }
+    } catch (e) {
+      console.error("Failed to create conversation", e);
+    }
+  };
+
+  useEffect(() => {
     fetchSettings();
+    createNewConversation();
   }, []);
 
   return (
     <div className="flex h-screen w-full bg-zinc-50 dark:bg-black font-sans">
-      {/* Sidebar - History & Config */}
-       <Sidebar
+      <Sidebar
         selectedId={selectedConversationId}
         onSelectConversation={setSelectedConversationId}
         onOpenSettings={() => setIsSettingsOpen(true)}
         refreshTrigger={refreshTrigger}
         temperature={temperature}
+        onNewConversation={createNewConversation}
       />
 
-      {/* Main Chat Area */}
       <main className="flex-1 h-screen overflow-hidden">
-        <ChatWindow 
-          conversationId={selectedConversationId} 
+        <ChatWindow
+          conversationId={selectedConversationId}
           onMessageSent={handleRefresh}
         />
       </main>
 
-      {/* Settings Modal */}
-       <SettingsDialog
+      <SettingsDialog
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSaveSuccess={fetchSettings}
