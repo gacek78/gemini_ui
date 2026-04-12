@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials"
 
 // Ta konfiguracja jest kompatybilna z Edge Runtime (nie zawiera Prisma Adaptera)
 export const authConfig = {
+  trustHost: true,
   providers: [
     Google,
     Credentials({
@@ -12,7 +13,7 @@ export const authConfig = {
         email: { label: "Email", type: "email", placeholder: "test@example.com" },
       },
       async authorize(credentials) {
-        // Ta funkcja jest wymagana przez strukturę, ale faktyczna weryfikacja 
+        // Ta funkcja jest wymagana przez strukturę, ale faktyczna weryfikacja
         // i dostęp do bazy danych Prisma odbywa się w pliku auth.ts (Node Runtime).
         return null;
       },
