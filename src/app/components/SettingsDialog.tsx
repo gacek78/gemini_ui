@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings, X, Save, Key, Sliders, Info, Sparkles, Sun, Globe, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Settings, X, Save, Key, Info, Sparkles, Sun, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -9,11 +9,15 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Max output tokens per model
 const MODEL_MAX_TOKENS: Record<string, number> = {
-  "gemini-2.5-flash": 65536,
-  "gemini-2.5-pro": 65536,
-  "gemini-2.5-flash-lite": 32768,
-  "gemini-2.0-flash": 8192,
+  "gemini-3.1-pro-preview":       65536,
+  "gemini-3-flash-preview":        65536,
+  "gemini-3.1-flash-lite-preview": 65536,
+  "gemini-2.5-flash":              65536,
+  "gemini-2.5-pro":                65536,
+  "gemini-2.5-flash-lite":         32768,
+  "gemini-2.0-flash":              8192,
 };
 
 interface SettingsDialogProps {
@@ -25,8 +29,8 @@ interface SettingsDialogProps {
 export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const [temperature, setTemperature] = useState(0.7);
-  const [maxOutputTokens, setMaxOutputTokens] = useState(2048);
-  const [modelName, setModelName] = useState("gemini-2.5-flash");
+  const [maxOutputTokens, setMaxOutputTokens] = useState(8192);
+  const [modelName, setModelName] = useState("gemini-3-flash-preview");
   const [themeMode, setThemeMode] = useState<"light" | "dark" | "system">("system");
   const [systemInstruction, setSystemInstruction] = useState("");
   const [useGrounding, setUseGrounding] = useState(false);
@@ -34,7 +38,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
 
-  const maxTokensForModel = MODEL_MAX_TOKENS[modelName] ?? 8192;
+  const maxTokensForModel = MODEL_MAX_TOKENS[modelName] ?? 65536;
 
   useEffect(() => {
     if (isOpen) {
@@ -45,8 +49,8 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
         .then((data) => {
           if (data && !data.error) {
             setTemperature(data.temperature ?? 0.7);
-            setMaxOutputTokens(data.maxOutputTokens ?? 2048);
-            setModelName(data.modelName ?? "gemini-2.5-flash");
+            setMaxOutputTokens(data.maxOutputTokens ?? 8192);
+            setModelName(data.modelName ?? "gemini-3-flash-preview");
             setSystemInstruction(data.systemInstruction || "");
             setUseGrounding(data.useGrounding || false);
           }
@@ -54,9 +58,8 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
     }
   }, [isOpen]);
 
-  // Gdy model się zmienia, ogranicz maxOutputTokens do max dla nowego modelu
   useEffect(() => {
-    const cap = MODEL_MAX_TOKENS[modelName] ?? 8192;
+    const cap = MODEL_MAX_TOKENS[modelName] ?? 65536;
     if (maxOutputTokens > cap) setMaxOutputTokens(cap);
   }, [modelName]);
 
@@ -138,7 +141,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
             <div className="flex gap-2">
               <input
                 type="password"
-                placeholder="Wprowadź swój klucz API..."
+                placeholder="Wprowadż swój klucz API..."
                 className="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 value={apiKey}
                 onChange={(e) => { setApiKey(e.target.value); setTestStatus("idle"); }}
@@ -176,10 +179,16 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
               >
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash ⚡ (polecany)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro 🧠 (najinteligentniejszy)</option>
-                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite 💨 (najtańszy)</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash (stary)</option>
+                <optgroup label="✨ Gemini 3 (nowe)">
+                  <option value="gemini-3-flash-preview">Gemini 3 Flash ⚡ (polecany)</option>
+                  <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro 🧠 (najinteligentniejszy)</option>
+                  <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite 💨 (najtańszy)</option>
+                </optgroup>
+                <optgroup label="⚠️ Gemini 2.5 (wygasa czerwiec 2026)">
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                </optgroup>
               </select>
             </div>
 
@@ -217,7 +226,6 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
               onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
               className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-200 dark:bg-zinc-700 accent-blue-500"
             />
-            {/* Pasek postępu */}
             <div className="h-1.5 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
               <div
                 className={cn(
@@ -229,7 +237,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
             </div>
             <div className="flex justify-between text-[10px] text-zinc-400">
               <span>256</span>
-              <span className="text-zinc-400">{maxOutputTokens.toLocaleString()} / {maxTokensForModel.toLocaleString()} max dla {modelName.replace("gemini-", "")} </span>
+              <span>{maxOutputTokens.toLocaleString()} / {maxTokensForModel.toLocaleString()} max</span>
               <span>{maxTokensForModel.toLocaleString()}</span>
             </div>
           </div>
