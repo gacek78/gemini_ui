@@ -53,13 +53,32 @@ export default function Sidebar({
     }
   };
 
-  const handleNewChat = async () => {
-    const firstEmpty = conversations.find(c => c.title === "Nowa rozmowa" && !c.isPinned);
-    if (firstEmpty) {
-      onSelectConversation(firstEmpty.id);
-      return;
+  // Usuń puste konwersacje (bez wiadomości) poza aktualnie wybraną
+  const deleteEmptyConversations = async (keepId: string) => {
+    try {
+      const res = await fetch("/api/conversations");
+      if (!res.ok) return;
+      const all = await res.json();
+      const empties = all.filter(
+        (c: any) => c.id !== keepId && c.title === "Nowa rozmowa" && !c.isPinned
+      );
+      await Promise.all(
+        empties.map((c: any) =>
+          fetch(`/api/conversations/${c.id}/messages`)
+            .then((r) => r.json())
+            .then((msgs) => {
+              if (msgs.length === 0) {
+                return fetch(`/api/conversations/${c.id}`, { method: "DELETE" });
+              }
+            })
+        )
+      );
+    } catch (e) {
+      console.error("Failed to delete empty conversations", e);
     }
+  };
 
+  const handleNewChat = async () => {
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
@@ -68,7 +87,9 @@ export default function Sidebar({
       });
       if (res.ok) {
         const newConv = await res.json();
-        setConversations(prev => [newConv, ...prev]);
+        // Usuń puste konwersacje przed odświeżeniem listy
+        await deleteEmptyConversations(newConv.id);
+        await fetchConversations();
         onSelectConversation(newConv.id);
       }
     } catch (error) {
@@ -288,7 +309,7 @@ export default function Sidebar({
                 <button
                   onClick={(e) => handleTogglePin(e, conv.id, conv.isPinned)}
                   className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50"
-                  title="Przypnij"
+                  title="Przypiń"
                 >
                   <Pin className="h-3.5 w-3.5" />
                 </button>
@@ -333,7 +354,6 @@ export default function Sidebar({
 
       {/* Footer / Settings */}
       <div className="border-t border-zinc-200 p-4 dark:border-zinc-800 space-y-3 pb-20 md:pb-8">
-        {/* Toggle Collapse Button - Moved up to avoid overlap with dev tools/overlays */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={cn(

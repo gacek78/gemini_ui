@@ -50,7 +50,6 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         refreshTrigger={refreshTrigger}
         temperature={temperature}
-        onNewConversation={createNewConversation}
       />
 
       <main className="flex-1 h-screen overflow-hidden">
