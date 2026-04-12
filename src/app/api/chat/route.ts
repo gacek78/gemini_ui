@@ -59,7 +59,9 @@ export async function POST(req: NextRequest) {
 
     const messageCount = await prisma.message.count({ where: { conversationId } });
     if (messageCount === 1) {
-      const newTitle = lastMessage.content.slice(0, 40) + (lastMessage.content.length > 40 ? "..." : "");
+      const newTitle =
+        lastMessage.content.slice(0, 40) +
+        (lastMessage.content.length > 40 ? "..." : "");
       await prisma.conversation.update({
         where: { id: conversationId },
         data: { title: newTitle },
@@ -120,6 +122,7 @@ export async function POST(req: NextRequest) {
         try {
           let fullResponse = "";
           let finalGroundingMetadata: any = null;
+          let finalUsage: any = null;
 
           for await (const chunk of result.stream) {
             const chunkText = chunk.text();
@@ -127,7 +130,14 @@ export async function POST(req: NextRequest) {
 
             if (groundingMetadata) {
               finalGroundingMetadata = groundingMetadata;
-              controller.enqueue(encoder.encode(`__METADATA__:${JSON.stringify(groundingMetadata)}\n`));
+              controller.enqueue(
+                encoder.encode(`__METADATA__:${JSON.stringify(groundingMetadata)}\n`)
+              );
+            }
+
+            // usageMetadata pojawia się w ostatnim chunk-u streamu
+            if (chunk.usageMetadata) {
+              finalUsage = chunk.usageMetadata;
             }
 
             if (chunkText) {
@@ -136,16 +146,21 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Pobierz usageMetadata z finalnej odpowiedzi
-          const response = await result.response;
-          const usage = response.usageMetadata;
-          if (usage) {
+          // Jeśli chunk nie zawierał usageMetadata, spróbuj z result.response
+          if (!finalUsage) {
+            try {
+              const resp = await result.response;
+              if (resp.usageMetadata) finalUsage = resp.usageMetadata;
+            } catch (_) {}
+          }
+
+          if (finalUsage) {
             controller.enqueue(
               encoder.encode(
                 `__TOKENS__:${JSON.stringify({
-                  promptTokenCount: usage.promptTokenCount ?? 0,
-                  candidatesTokenCount: usage.candidatesTokenCount ?? 0,
-                  totalTokenCount: usage.totalTokenCount ?? 0,
+                  promptTokenCount: finalUsage.promptTokenCount ?? 0,
+                  candidatesTokenCount: finalUsage.candidatesTokenCount ?? 0,
+                  totalTokenCount: finalUsage.totalTokenCount ?? 0,
                   model: modelName,
                 })}\n`
               )
