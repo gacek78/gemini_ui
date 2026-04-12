@@ -1,7 +1,7 @@
 "use client";
  
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, MessageSquare, Settings, ChevronLeft, ChevronRight, Trash2, Edit2, Pin, PinOff, Check, X, Sun, Moon, Loader2, Sparkles, LogOut, Sliders } from "lucide-react";
+import { Plus, MessageSquare, Settings, ChevronLeft, ChevronRight, Trash2, Edit2, Pin, PinOff, Sparkles, LogOut, Sliders, Globe } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import DeleteConfirmDialog from "./DeleteConfirmDialog";
 import { clsx, type ClassValue } from "clsx";
@@ -17,14 +17,20 @@ interface SidebarProps {
   onOpenSettings: () => void;
   refreshTrigger: number;
   temperature: number;
+  onTemperatureChange: (val: number) => void;
+  useGrounding: boolean;
+  onGroundingChange: (val: boolean) => void;
 }
 
-export default function Sidebar({ 
-    selectedId, 
-    onSelectConversation, 
-    onOpenSettings, 
-    refreshTrigger,
-    temperature
+export default function Sidebar({
+  selectedId,
+  onSelectConversation,
+  onOpenSettings,
+  refreshTrigger,
+  temperature,
+  onTemperatureChange,
+  useGrounding,
+  onGroundingChange,
 }: SidebarProps) {
   const { data: session } = useSession();
   const [conversations, setConversations] = useState<any[]>([]);
@@ -53,7 +59,6 @@ export default function Sidebar({
     }
   };
 
-  // Usuń puste konwersacje (bez wiadomości) poza aktualnie wybraną
   const deleteEmptyConversations = async (keepId: string) => {
     try {
       const res = await fetch("/api/conversations");
@@ -87,13 +92,12 @@ export default function Sidebar({
       });
       if (res.ok) {
         const newConv = await res.json();
-        // Usuń puste konwersacje przed odświeżeniem listy
         await deleteEmptyConversations(newConv.id);
         await fetchConversations();
         onSelectConversation(newConv.id);
       }
     } catch (error) {
-       alert("Błąd tworzenia czatu");
+      alert("Błąd tworzenia czatu");
     }
   };
 
@@ -107,11 +111,9 @@ export default function Sidebar({
     if (!deletingId) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/conversations/${deletingId}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`/api/conversations/${deletingId}`, { method: "DELETE" });
       if (res.ok) {
-        setConversations(prev => prev.filter(c => c.id !== deletingId));
+        setConversations((prev) => prev.filter((c) => c.id !== deletingId));
         if (selectedId === deletingId) onSelectConversation(null);
         setDeletingId(null);
       }
@@ -130,9 +132,7 @@ export default function Sidebar({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isPinned: !currentPinned }),
       });
-      if (res.ok) {
-        fetchConversations();
-      }
+      if (res.ok) fetchConversations();
     } catch (error) {
       console.error("Failed to toggle pin");
     }
@@ -154,7 +154,9 @@ export default function Sidebar({
         body: JSON.stringify({ title: editTitle }),
       });
       if (res.ok) {
-        setConversations(prev => prev.map(c => c.id === editingId ? { ...c, title: editTitle } : c));
+        setConversations((prev) =>
+          prev.map((c) => (c.id === editingId ? { ...c, title: editTitle } : c))
+        );
         setEditingId(null);
       }
     } catch (error) {
@@ -162,8 +164,8 @@ export default function Sidebar({
     }
   };
 
-  const pinned = conversations.filter(c => c.isPinned);
-  const others = conversations.filter(c => !c.isPinned);
+  const pinned = conversations.filter((c) => c.isPinned);
+  const others = conversations.filter((c) => !c.isPinned);
 
   return (
     <aside
@@ -189,17 +191,16 @@ export default function Sidebar({
       {/* History List */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1 scrollbar-thin">
         {!isCollapsed && conversations.length === 0 && (
-            <div className="mt-10 px-4 text-center">
-                <div className="mb-3 flex justify-center">
-                    <Sparkles className="h-8 w-8 text-zinc-300 dark:text-zinc-700 animate-pulse" />
-                </div>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                    Brak rozmów. Rozpocznij nowy wątek, aby go tutaj zobaczyć.
-                </p>
+          <div className="mt-10 px-4 text-center">
+            <div className="mb-3 flex justify-center">
+              <Sparkles className="h-8 w-8 text-zinc-300 dark:text-zinc-700 animate-pulse" />
             </div>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              Brak rozmów. Rozpocznij nowy wątek, aby go tutaj zobaczyć.
+            </p>
+          </div>
         )}
 
-        {/* Pinned Section */}
         {pinned.map((conv) => (
           <div
             key={conv.id}
@@ -214,9 +215,8 @@ export default function Sidebar({
             )}
           >
             <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                <Pin className="h-3.5 w-3.5 fill-current text-blue-500" />
+              <Pin className="h-3.5 w-3.5 fill-current text-blue-500" />
             </div>
-            
             {!isCollapsed && (
               <div className="flex-1 truncate">
                 {editingId === conv.id ? (
@@ -234,41 +234,20 @@ export default function Sidebar({
                 )}
               </div>
             )}
-
             {!isCollapsed && (hoveredId === conv.id || selectedId === conv.id) && (
-              <div className="flex gap-1.5 transition-all">
-                <button
-                  onClick={(e) => handleTogglePin(e, conv.id, conv.isPinned)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50"
-                  title="Odepnij"
-                >
-                  <PinOff className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => handleStartEdit(e, conv.id, conv.title)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50"
-                  title="Zmień nazwę"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => handleDeleteClick(e, conv.id, conv.title)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 text-zinc-500 hover:text-red-500 dark:hover:bg-zinc-700/50"
-                  title="Usuń"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+              <div className="flex gap-1.5">
+                <button onClick={(e) => handleTogglePin(e, conv.id, conv.isPinned)} className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50" title="Odepnij"><PinOff className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => handleStartEdit(e, conv.id, conv.title)} className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50" title="Zmień nazwę"><Edit2 className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => handleDeleteClick(e, conv.id, conv.title)} className="rounded p-0.5 hover:bg-zinc-300/50 text-zinc-500 hover:text-red-500 dark:hover:bg-zinc-700/50" title="Usuń"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             )}
           </div>
         ))}
 
-        {/* Divider if both sections exist */}
         {pinned.length > 0 && others.length > 0 && (
-            <div className="mx-3 my-2 border-b border-zinc-200 dark:border-zinc-800" />
+          <div className="mx-3 my-2 border-b border-zinc-200 dark:border-zinc-800" />
         )}
 
-        {/* Regular Section */}
         {others.map((conv) => (
           <div
             key={conv.id}
@@ -283,9 +262,8 @@ export default function Sidebar({
             )}
           >
             <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                <MessageSquare className="h-4 w-4 opacity-50" />
+              <MessageSquare className="h-4 w-4 opacity-50" />
             </div>
-            
             {!isCollapsed && (
               <div className="flex-1 truncate">
                 {editingId === conv.id ? (
@@ -303,43 +281,75 @@ export default function Sidebar({
                 )}
               </div>
             )}
-
             {!isCollapsed && (hoveredId === conv.id || selectedId === conv.id) && (
-              <div className="flex gap-1.5 transition-all">
-                <button
-                  onClick={(e) => handleTogglePin(e, conv.id, conv.isPinned)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50"
-                  title="Przypiń"
-                >
-                  <Pin className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => handleStartEdit(e, conv.id, conv.title)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50"
-                  title="Zmień nazwę"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => handleDeleteClick(e, conv.id, conv.title)}
-                  className="rounded p-0.5 hover:bg-zinc-300/50 text-zinc-500 hover:text-red-500 dark:hover:bg-zinc-700/50"
-                  title="Usuń"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+              <div className="flex gap-1.5">
+                <button onClick={(e) => handleTogglePin(e, conv.id, conv.isPinned)} className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50" title="Przypiń"><Pin className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => handleStartEdit(e, conv.id, conv.title)} className="rounded p-0.5 hover:bg-zinc-300/50 dark:hover:bg-zinc-700/50" title="Zmień nazwę"><Edit2 className="h-3.5 w-3.5" /></button>
+                <button onClick={(e) => handleDeleteClick(e, conv.id, conv.title)} className="rounded p-0.5 hover:bg-zinc-300/50 text-zinc-500 hover:text-red-500 dark:hover:bg-zinc-700/50" title="Usuń"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             )}
           </div>
         ))}
       </div>
 
+      {/* Temperatura + Grounding w sidebarze */}
+      {!isCollapsed && (
+        <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+          {/* Suwak temperatury */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <Sliders className="h-3.5 w-3.5" />
+                Temperatura
+              </label>
+              <span className="font-mono text-xs font-semibold text-blue-500">{temperature.toFixed(1)}</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={temperature}
+              onChange={(e) => onTemperatureChange(parseFloat(e.target.value))}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-200 dark:bg-zinc-700 accent-blue-500"
+            />
+            <div className="flex justify-between text-[10px] text-zinc-400">
+              <span>Precyzyjny</span>
+              <span>Kreatywny</span>
+            </div>
+          </div>
+
+          {/* Przełącznik Grounding */}
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <Globe className="h-3.5 w-3.5" />
+              Google Search
+            </label>
+            <button
+              type="button"
+              onClick={() => onGroundingChange(!useGrounding)}
+              title={useGrounding ? "Wyłącz wyszukiwarkę Google" : "Włącz wyszukiwarkę Google"}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
+                useGrounding ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-600"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200",
+                  useGrounding ? "translate-x-4" : "translate-x-0"
+                )}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Logout */}
       <div className="px-4 py-2">
         <button
           onClick={() => {
-            if (confirm("Czy na pewno chcesz się wylogować?")) {
-              signOut();
-            }
+            if (confirm("Czy na pewno chcesz się wylogować?")) signOut();
           }}
           className={cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-500 transition-all hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/10",
@@ -357,15 +367,13 @@ export default function Sidebar({
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={cn(
-            "flex w-full items-center justify-center rounded-lg p-2 text-zinc-400 transition-all",
-            "hover:bg-zinc-100 dark:hover:bg-zinc-800",
+            "flex w-full items-center justify-center rounded-lg p-2 text-zinc-400 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800",
             isCollapsed && "bg-zinc-100 dark:bg-zinc-800 text-blue-500"
           )}
           title={isCollapsed ? "Rozwiń pasek boczny" : "Zwiń pasek boczny"}
         >
           {isCollapsed ? <ChevronRight className="h-6 w-6" /> : <ChevronLeft className="h-5 w-5" />}
         </button>
-
         <button
           onClick={onOpenSettings}
           className={cn(
@@ -376,24 +384,6 @@ export default function Sidebar({
           <Settings className="h-5 w-5" />
           {!isCollapsed && <span>Ustawienia</span>}
         </button>
-
-        <div
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400 bg-zinc-100/50 dark:bg-zinc-800/20 shadow-inner",
-            isCollapsed && "justify-center"
-          )}
-          title={`Temperatura odpowiedzi: ${temperature}`}
-        >
-          <Sliders className="h-5 w-5 text-blue-500" />
-          {!isCollapsed && (
-              <div className="flex flex-1 items-center justify-between">
-                  <span className="font-medium">Temperatura</span>
-                  <span className="font-mono text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                      {temperature.toFixed(1)}
-                  </span>
-              </div>
-          )}
-        </div>
       </div>
 
       <DeleteConfirmDialog

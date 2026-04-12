@@ -10,6 +10,8 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [temperature, setTemperature] = useState(0.7);
+  const [maxOutputTokens, setMaxOutputTokens] = useState(2048);
+  const [useGrounding, setUseGrounding] = useState(false);
 
   const handleRefresh = () => setRefreshTrigger((prev) => prev + 1);
 
@@ -18,12 +20,33 @@ export default function Home() {
       const res = await fetch("/api/settings");
       const data = await res.json();
       if (data && !data.error) {
-        setTemperature(data.temperature || 0.7);
+        setTemperature(data.temperature ?? 0.7);
+        setMaxOutputTokens(data.maxOutputTokens ?? 2048);
+        setUseGrounding(data.useGrounding ?? false);
       }
     } catch (e) {}
   };
 
-  // Utwórz nową konwersację automatycznie przy starcie
+  const saveSetting = async (patch: Record<string, any>) => {
+    try {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch (e) {}
+  };
+
+  const handleTemperatureChange = (val: number) => {
+    setTemperature(val);
+    saveSetting({ temperature: val });
+  };
+
+  const handleGroundingChange = (val: boolean) => {
+    setUseGrounding(val);
+    saveSetting({ useGrounding: val });
+  };
+
   const createNewConversation = async () => {
     try {
       const res = await fetch("/api/conversations", { method: "POST" });
@@ -50,12 +73,16 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         refreshTrigger={refreshTrigger}
         temperature={temperature}
+        onTemperatureChange={handleTemperatureChange}
+        useGrounding={useGrounding}
+        onGroundingChange={handleGroundingChange}
       />
 
       <main className="flex-1 h-screen overflow-hidden">
         <ChatWindow
           conversationId={selectedConversationId}
           onMessageSent={handleRefresh}
+          maxOutputTokens={maxOutputTokens}
         />
       </main>
 

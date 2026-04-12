@@ -1,13 +1,20 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Settings, X, Save, Key, Sliders, Info, Sparkles, Sun, Moon, Laptop, Globe } from "lucide-react";
+import { Settings, X, Save, Key, Sliders, Info, Sparkles, Sun, Globe, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const MODEL_MAX_TOKENS: Record<string, number> = {
+  "gemini-2.5-flash": 65536,
+  "gemini-2.5-pro": 65536,
+  "gemini-2.5-flash-lite": 32768,
+  "gemini-2.0-flash": 8192,
+};
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -25,21 +32,21 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
   const [useGrounding, setUseGrounding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+
+  const maxTokensForModel = MODEL_MAX_TOKENS[modelName] ?? 8192;
 
   useEffect(() => {
     if (isOpen) {
-      // Załaduj motyw z localStorage
       const savedTheme = localStorage.getItem("theme") as any;
-      if (savedTheme) setThemeMode(savedTheme);
-      else setThemeMode("system");
-
+      setThemeMode(savedTheme || "system");
       fetch("/api/settings")
         .then((res) => res.json())
         .then((data) => {
           if (data && !data.error) {
-            setTemperature(data.temperature || 0.7);
-            setMaxOutputTokens(data.maxOutputTokens || 2048);
-            setModelName(data.modelName || "gemini-2.5-flash");
+            setTemperature(data.temperature ?? 0.7);
+            setMaxOutputTokens(data.maxOutputTokens ?? 2048);
+            setModelName(data.modelName ?? "gemini-2.5-flash");
             setSystemInstruction(data.systemInstruction || "");
             setUseGrounding(data.useGrounding || false);
           }
@@ -47,24 +54,38 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
     }
   }, [isOpen]);
 
+  // Gdy model się zmienia, ogranicz maxOutputTokens do max dla nowego modelu
+  useEffect(() => {
+    const cap = MODEL_MAX_TOKENS[modelName] ?? 8192;
+    if (maxOutputTokens > cap) setMaxOutputTokens(cap);
+  }, [modelName]);
+
   const applyTheme = (mode: "light" | "dark" | "system") => {
     const html = document.documentElement;
     if (mode === "system") {
       localStorage.removeItem("theme");
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        html.classList.add("dark");
-      } else {
-        html.classList.remove("dark");
-      }
+      html.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);
     } else {
       localStorage.setItem("theme", mode);
-      if (mode === "dark") {
-        html.classList.add("dark");
-      } else {
-        html.classList.remove("dark");
-      }
+      html.classList.toggle("dark", mode === "dark");
     }
     setThemeMode(mode);
+  };
+
+  const handleTestKey = async () => {
+    if (!apiKey) return;
+    setTestStatus("testing");
+    try {
+      const res = await fetch("/api/test-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      });
+      setTestStatus(res.ok ? "ok" : "fail");
+    } catch {
+      setTestStatus("fail");
+    }
+    setTimeout(() => setTestStatus("idle"), 4000);
   };
 
   const handleSave = async () => {
@@ -74,27 +95,16 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey,
-          temperature,
-          maxOutputTokens,
-          modelName,
-          systemInstruction,
-          useGrounding,
-        }),
+        body: JSON.stringify({ apiKey, temperature, maxOutputTokens, modelName, systemInstruction, useGrounding }),
       });
-
       if (res.ok) {
         setStatus("success");
         if (onSaveSuccess) onSaveSuccess();
-        setTimeout(() => {
-          onClose();
-          setStatus("idle");
-        }, 1500);
+        setTimeout(() => { onClose(); setStatus("idle"); }, 1500);
       } else {
         setStatus("error");
       }
-    } catch (error) {
+    } catch {
       setStatus("error");
     } finally {
       setLoading(false);
@@ -103,108 +113,66 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
 
   if (!isOpen) return null;
 
+  const tokenPercent = Math.min((maxOutputTokens / maxTokensForModel) * 100, 100);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-all duration-300 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-6 py-4">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-zinc-500" />
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Ustawienia</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-          >
+          <button onClick={onClose} className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="space-y-6 px-6 py-6 overflow-y-auto max-h-[80vh]">
-          {/* API Key Section */}
+
+          {/* API Key */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              <Key className="h-4 w-4" />
-              Klucz API Gemini
+              <Key className="h-4 w-4" /> Klucz API Gemini
             </label>
-            <input
-              type="password"
-              placeholder="Wprowadź swój klucz API..."
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
+            <div className="flex gap-2">
+              <input
+                type="password"
+                placeholder="Wprowadź swój klucz API..."
+                className="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                value={apiKey}
+                onChange={(e) => { setApiKey(e.target.value); setTestStatus("idle"); }}
+              />
+              <button
+                onClick={handleTestKey}
+                disabled={!apiKey || testStatus === "testing"}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all border",
+                  testStatus === "ok" ? "border-emerald-500 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20" :
+                  testStatus === "fail" ? "border-red-400 bg-red-50 text-red-600 dark:bg-red-900/20" :
+                  "border-zinc-200 bg-zinc-50 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                )}
+              >
+                {testStatus === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                 testStatus === "ok" ? <CheckCircle2 className="h-4 w-4" /> :
+                 testStatus === "fail" ? <XCircle className="h-4 w-4" /> :
+                 <Key className="h-4 w-4" />}
+                {testStatus === "ok" ? "OK" : testStatus === "fail" ? "Błąd" : "Testuj"}
+              </button>
+            </div>
             <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
               Używamy Twojego własnego klucza (BYOK). Klucz jest szyfrowany (AES-256) przed zapisem.
             </p>
           </div>
 
-          {/* Model Params Section */}
+          {/* Model Gemini */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                <Sliders className="h-4 w-4 mr-1" />
-                Temperatura: <span className="font-mono text-blue-600 dark:text-blue-400">{temperature.toFixed(1)}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-200 dark:bg-zinc-700"
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              />
-            </div>
-            {/* Grounding Toggle Section */}
-            <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                <Globe className="h-4 w-4 text-blue-500" />
-                Wyszukiwarka Google (Grounding)
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setUseGrounding(!useGrounding)}
-                  className={cn(
-                    "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                    useGrounding ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-700"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                      useGrounding ? "translate-x-5" : "translate-x-0"
-                    )}
-                  />
-                </button>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Uziemienie w Google Search (tylko dla płatnych kluczy)
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Max Tokens: <span className="font-mono text-blue-600 dark:text-blue-400">{maxOutputTokens}</span>
-              </label>
-              <input
-                type="number"
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                value={maxOutputTokens}
-                onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Model Selection Section */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                <Sparkles className="h-4 w-4" />
-                Model Gemini
+                <Sparkles className="h-4 w-4" /> Model Gemini
               </label>
               <select
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-all focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
               >
@@ -215,14 +183,13 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
               </select>
             </div>
 
-            {/* Theme Selection Section */}
+            {/* Motyw wizualny */}
             <div className="space-y-2">
               <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                <Sun className="h-4 w-4" />
-                Motyw wizualny
+                <Sun className="h-4 w-4" /> Motyw wizualny
               </label>
               <select
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-all focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 value={themeMode}
                 onChange={(e) => applyTheme(e.target.value as any)}
               >
@@ -233,16 +200,49 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
             </div>
           </div>
 
-          {/* System Prompt Section */}
+          {/* Max Tokens suwak */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                Max Tokens odpowiedzi
+              </label>
+              <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{maxOutputTokens.toLocaleString()}</span>
+            </div>
+            <input
+              type="range"
+              min="256"
+              max={maxTokensForModel}
+              step="256"
+              value={maxOutputTokens}
+              onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-200 dark:bg-zinc-700 accent-blue-500"
+            />
+            {/* Pasek postępu */}
+            <div className="h-1.5 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-300",
+                  tokenPercent >= 80 ? "bg-amber-400" : "bg-blue-400"
+                )}
+                style={{ width: `${tokenPercent}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-zinc-400">
+              <span>256</span>
+              <span className="text-zinc-400">{maxOutputTokens.toLocaleString()} / {maxTokensForModel.toLocaleString()} max dla {modelName.replace("gemini-", "")} </span>
+              <span>{maxTokensForModel.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Instrukcja systemowa */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              <Info className="h-4 w-4" />
-              Instrukcja Systemowa (Persona)
+              <Info className="h-4 w-4" /> Instrukcja Systemowa (Persona)
             </label>
             <textarea
               placeholder="NP: Jesteś pomocnym asystentem AI..."
               rows={4}
-              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none transition-all focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 h-24"
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 h-24"
               value={systemInstruction}
               onChange={(e) => setSystemInstruction(e.target.value)}
             />
@@ -250,10 +250,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
         </div>
 
         <div className="bg-zinc-50 dark:bg-zinc-800/50 px-6 py-4 flex items-center justify-end gap-3 border-t border-zinc-100 dark:border-zinc-800">
-          <button
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800"
-          >
+          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800">
             Anuluj
           </button>
           <button
@@ -265,11 +262,7 @@ export default function SettingsDialog({ isOpen, onClose, onSaveSuccess }: Setti
               status === "error" && "bg-red-600 hover:bg-red-600"
             )}
           >
-            {loading ? "Zapisywanie..." : status === "success" ? "Zapisano!" : status === "error" ? "Błąd!" : (
-              <>
-                <Save className="h-4 w-4" /> Zapisz
-              </>
-            )}
+            {loading ? "Zapisywanie..." : status === "success" ? "Zapisano!" : status === "error" ? "Błąd!" : (<><Save className="h-4 w-4" /> Zapisz</>)}
           </button>
         </div>
       </div>
