@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
-// @ts-expect-error Types for pg might be slightly misaligned with adapter
 import { Pool } from "pg"
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
