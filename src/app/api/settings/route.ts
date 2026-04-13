@@ -29,27 +29,47 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { apiKey, temperature, maxOutputTokens, topP, topK, systemInstruction, modelName, useGrounding } = await req.json();
+    const body = await req.json();
+    const {
+      apiKey,
+      temperature,
+      maxOutputTokens,
+      topP,
+      topK,
+      systemInstruction,
+      modelName,
+      useGrounding,
+    } = body;
 
-    const data: any = {
+    // Budujemy obiekt tylko z tych pól, które faktycznie przyszły w requescie
+    const patch: any = {};
+
+    if (temperature !== undefined)      patch.temperature      = parseFloat(temperature);
+    if (maxOutputTokens !== undefined)  patch.maxOutputTokens  = parseInt(maxOutputTokens);
+    if (topP !== undefined)             patch.topP             = parseFloat(topP);
+    if (topK !== undefined)             patch.topK             = parseInt(topK);
+    if (systemInstruction !== undefined) patch.systemInstruction = systemInstruction || null;
+    if (modelName !== undefined)        patch.modelName        = modelName;
+    if (useGrounding !== undefined)     patch.useGrounding     = Boolean(useGrounding);
+    if (apiKey)                         patch.encryptedApiKey  = encryptKey(apiKey);
+
+    // Przy create (upsert) potrzebujemy też userId i rozsądnych defaultów
+    const createData: any = {
       userId: session.user.id,
-      temperature: temperature !== undefined ? parseFloat(temperature) : 0.7,
-      maxOutputTokens: maxOutputTokens !== undefined ? parseInt(maxOutputTokens) : 2048,
-      topP: topP !== undefined ? parseFloat(topP) : 0.9,
-      topK: topK !== undefined ? parseInt(topK) : 40,
-      systemInstruction: systemInstruction || null,
-      modelName: modelName || "gemini-2.5-flash",
-      useGrounding: useGrounding !== undefined ? Boolean(useGrounding) : false,
+      temperature:      patch.temperature      ?? 0.7,
+      maxOutputTokens:  patch.maxOutputTokens  ?? 2048,
+      topP:             patch.topP             ?? 0.9,
+      topK:             patch.topK             ?? 40,
+      systemInstruction: patch.systemInstruction ?? null,
+      modelName:        patch.modelName        ?? "gemini-2.5-flash",
+      useGrounding:     patch.useGrounding     ?? false,
     };
-
-    if (apiKey) {
-      data.encryptedApiKey = encryptKey(apiKey);
-    }
+    if (patch.encryptedApiKey) createData.encryptedApiKey = patch.encryptedApiKey;
 
     const updatedSettings = await prisma.userSettings.upsert({
-      where: { userId: session.user.id },
-      update: data,
-      create: data,
+      where:  { userId: session.user.id },
+      update: patch,        // ← tylko pola które przyszły
+      create: createData,   // ← pełny obiekt przy pierwszym zapisie
     });
 
     return NextResponse.json(updatedSettings);
