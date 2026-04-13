@@ -6,7 +6,8 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
 const connectionString = process.env.DATABASE_URL
 const pool = new Pool({ connectionString })
-const adapter = new PrismaPg(pool as unknown as import("pg").Pool)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const adapter = new PrismaPg(pool as any)
 
 export const prisma =
   globalForPrisma.prisma || new PrismaClient({ adapter })
