@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, Tool, Part } from '@google/generative-ai';
 
 /**
  * Mapa limitów okna kontekstowego per model (w tokenach)
@@ -27,7 +27,8 @@ export function getContextWindow(modelName: string): number {
 
 export function getGeminiModel(apiKey: string, modelName: string = 'gemini-3-flash-preview', systemInstruction?: string, useGrounding: boolean = false) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const tools = useGrounding ? [{ google_search: {} }] as any : undefined;
+  // @ts-expect-error type mismatches in google SDK for grounding tool
+  const tools: Tool[] | undefined = useGrounding ? [{ googleSearch: {} }] : undefined;
   return genAI.getGenerativeModel({
     model: modelName,
     systemInstruction: systemInstruction ? { role: 'system', parts: [{ text: systemInstruction }] } : undefined,
@@ -35,10 +36,15 @@ export function getGeminiModel(apiKey: string, modelName: string = 'gemini-3-fla
   });
 }
 
-export function formatHistory(messages: any[], limit: number = 20) {
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
+
+export function formatHistory(messages: ChatMessage[], limit: number = 20) {
   const slicedMessages = messages.length > limit ? messages.slice(-limit) : messages;
   return slicedMessages.map((msg) => {
-    let parts: any[] = [];
+    const parts: Part[] = [];
     try {
       const parsed = JSON.parse(msg.content);
       if (parsed.image) {

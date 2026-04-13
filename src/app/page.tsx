@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import ChatWindow from "./components/ChatWindow";
 import SettingsDialog from "./components/SettingsDialog";
@@ -13,9 +13,9 @@ export default function Home() {
   const [maxOutputTokens, setMaxOutputTokens] = useState(2048);
   const [useGrounding, setUseGrounding] = useState(false);
 
-  const handleRefresh = () => setRefreshTrigger((prev) => prev + 1);
+  const handleRefresh = useCallback(() => setRefreshTrigger((prev) => prev + 1), []);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch("/api/settings");
       const data = await res.json();
@@ -24,17 +24,17 @@ export default function Home() {
         setMaxOutputTokens(data.maxOutputTokens ?? 2048);
         setUseGrounding(data.useGrounding ?? false);
       }
-    } catch (e) {}
-  };
+    } catch {}
+  }, []);
 
-  const saveSetting = async (patch: Record<string, any>) => {
+  const saveSetting = async (patch: Record<string, unknown>) => {
     try {
       await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-    } catch (e) {}
+    } catch {}
   };
 
   const handleTemperatureChange = (val: number) => {
@@ -47,7 +47,7 @@ export default function Home() {
     saveSetting({ useGrounding: val });
   };
 
-  const createNewConversation = async () => {
+  const createNewConversation = useCallback(async () => {
     try {
       const res = await fetch("/api/conversations", { method: "POST" });
       if (res.ok) {
@@ -58,12 +58,19 @@ export default function Home() {
     } catch (e) {
       console.error("Failed to create conversation", e);
     }
-  };
+  }, [handleRefresh]);
 
   useEffect(() => {
-    fetchSettings();
-    createNewConversation();
-  }, []);
+    let mounted = true;
+    const init = async () => {
+      await fetchSettings();
+      if (mounted) {
+        await createNewConversation();
+      }
+    };
+    init();
+    return () => { mounted = false; };
+  }, [fetchSettings, createNewConversation]);
 
   return (
     <div className="flex h-screen w-full bg-zinc-50 dark:bg-black font-sans">

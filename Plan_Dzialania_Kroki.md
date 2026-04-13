@@ -32,3 +32,7 @@ Poniżej znajduje się szczegółowy, ułożony chronologicznie plan wdrożenia 
 - [x] **Etap 5.1**: Obsługa plików (obrazów) - przesył, konwersja do Base64 i analiza przez Gemini.
 - [x] **Etap 5.2**: Wprowadzenie narzędzi (`Google Search / Grounding`). Automatyczna weryfikacja faktów w sieci i wyświetlanie źródeł.
 - [ ] **Etap 5.3**: Generowanie obrazów. (Pominięto na prośbę użytkownika)
+
+## Faza 6: Optymalizacja i Weryfikacja
+- [x] **Etap 6.1**: Certyfikacja typów TypeScript i weryfikacja statyczna kodu (Linting).
+- [x] **Etap 6.2**: Aktualizacja głównego dokumentu informacyjnego (README.md) z nastawieniem na Self-Hosted i BYOK.

@@ -12,7 +12,7 @@ export const authConfig = {
       credentials: {
         email: { label: "Email", type: "email", placeholder: "test@example.com" },
       },
-      async authorize(credentials) {
+      async authorize() {
         // Ta funkcja jest wymagana przez strukturę, ale faktyczna weryfikacja
         // i dostęp do bazy danych Prisma odbywa się w pliku auth.ts (Node Runtime).
         return null;
@@ -28,8 +28,8 @@ export const authConfig = {
       return token;
     },
     async session({ session, token }) {
-      if (session?.user) {
-        (session.user as any).id = token.id as string;
+      if (session?.user && typeof token.id === "string") {
+        session.user.id = token.id;
       }
       return session;
     },

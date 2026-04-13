@@ -9,15 +9,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
-    ...authConfig.providers.filter(p => (p as any).id !== "credentials"),
+    ...authConfig.providers.filter(p => (p as { id?: string }).id !== "credentials"),
     Credentials({
         name: "Test Login",
         credentials: {
           email: { label: "Email", type: "email", placeholder: "test@example.com" },
         },
-        async authorize(credentials: any) {
+        async authorize(credentials: Partial<Record<"email", unknown>>) {
           if (credentials?.email === "test@example.com" || credentials?.email === "gacek78@gmail.com") {
-            const email = credentials.email;
+            const email = String(credentials.email);
             let user = await prisma.user.findUnique({ where: { email } });
             if (!user) {
               user = await prisma.user.create({

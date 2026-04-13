@@ -22,6 +22,13 @@ interface SidebarProps {
   onGroundingChange: (val: boolean) => void;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  isPinned: boolean;
+  [key: string]: unknown;
+}
+
 export default function Sidebar({
   selectedId,
   onSelectConversation,
@@ -33,7 +40,7 @@ export default function Sidebar({
   onGroundingChange,
 }: SidebarProps) {
   const { data: session } = useSession();
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -41,7 +48,6 @@ export default function Sidebar({
   const [deletingTitle, setDeletingTitle] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetchConversations();
@@ -54,7 +60,7 @@ export default function Sidebar({
         const data = await res.json();
         setConversations(data);
       }
-    } catch (error) {
+    } catch {
       console.error("Failed to fetch conversations");
     }
   };
@@ -63,12 +69,12 @@ export default function Sidebar({
     try {
       const res = await fetch("/api/conversations");
       if (!res.ok) return;
-      const all = await res.json();
+      const all: Conversation[] = await res.json();
       const empties = all.filter(
-        (c: any) => c.id !== keepId && c.title === "Nowa rozmowa" && !c.isPinned
+        (c) => c.id !== keepId && c.title === "Nowa rozmowa" && !c.isPinned
       );
       await Promise.all(
-        empties.map((c: any) =>
+        empties.map((c) =>
           fetch(`/api/conversations/${c.id}/messages`)
             .then((r) => r.json())
             .then((msgs) => {
@@ -96,7 +102,7 @@ export default function Sidebar({
         await fetchConversations();
         onSelectConversation(newConv.id);
       }
-    } catch (error) {
+    } catch {
       alert("Błąd tworzenia czatu");
     }
   };
@@ -117,7 +123,7 @@ export default function Sidebar({
         if (selectedId === deletingId) onSelectConversation(null);
         setDeletingId(null);
       }
-    } catch (error) {
+    } catch {
       console.error("Failed to delete conversation");
     } finally {
       setIsDeleting(false);
@@ -133,7 +139,7 @@ export default function Sidebar({
         body: JSON.stringify({ isPinned: !currentPinned }),
       });
       if (res.ok) fetchConversations();
-    } catch (error) {
+    } catch {
       console.error("Failed to toggle pin");
     }
   };
@@ -159,7 +165,7 @@ export default function Sidebar({
         );
         setEditingId(null);
       }
-    } catch (error) {
+    } catch {
       console.error("Failed to save title");
     }
   };

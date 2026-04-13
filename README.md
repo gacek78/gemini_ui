@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SmartCompanion (Gemini UI)
 
-## Getting Started
+**SmartCompanion** to nowoczesny interfejs chat-owy bazujący na Google Gemini API, dający Ci pełną, lokalną kontrolę i prywatność nad historią Twoich rozmów. System stworzono zgodnie z wzorcem **Self-Hosted** i wsparciem na przynieś własny klucz **(Bring Your Own Key - BYOK)**, który szyfrowany jest na poziomie własnego serwera. W pełni multimodalny interfejs oferuje strumieniowanie zapytań (streaming), obsługę załączników, generowanie historii z automatycznymi podsumowaniami i odpytywanie Internetu w czasie rzeczywistym.
 
-First, run the development server:
+## Wymagania systemowe
+
+Aby poprawnie zbudować i uruchomić ten projekt potrzebujesz:
+- **Node.js** w wersji LTS (np. v20.x+)
+- **NPM** lub wybranego managera pakietów
+- **Docker** oraz **Docker Compose** dla łatwej instalacji bazy postgresql
+
+## Instalacja
+
+Sklonuj repozytorium i wykonaj poniższe komendy do instalacji pakietów klienckich:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Konfiguracja Zmiennych Środowiskowych
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Skopiuj plik `.env.example` lub stwórz świeży plik `.env` w głównym katalogu
+2. Wymagane są następujące zmienne (lub dostosuj istniejące):
+   - `DATABASE_URL` – Ścieżka połączenia z bazą PostgreSQL
+   - `AUTH_SECRET` – Główne, tajne hasło do szyfrowania sesji bazy (zalecana generacja poprzez `openssl rand -base64 32`)
+   - `ENCRYPTION_KEY` – 32-bajtowy klucz kodowany w base64, wykorzystywany do silnego szyfrowania w bazi Twojego klucza prywatnego Gemini. (Wygeneruj komendą w terminalu: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Do domyślnego Docker Compose w projekcie, poprawny url brzmi:
+`DATABASE_URL="postgresql://postgres:postgres@localhost:5432/geminidb?schema=public"`
 
-## Learn More
+## Uruchomienie Bazy Danych
 
-To learn more about Next.js, take a look at the following resources:
+Rozpocznij proces bazy polegający na standardowym środowisku instalacji:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Odpal kontener
+docker-compose up -d
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Podnieś schemat Prisma. Oczekuj chwilę od spięcia kontenera przed wykonaniem:
+npx prisma generate
+npx prisma db push
+```
 
-## Deploy on Vercel
+## Uruchomienie Aplikacji
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+By podnieść serwer deweloperski wydaj komendę:
+```bash
+npm run dev
+```
+Użytkowo otwiera stronę [http://localhost:3000](http://localhost:3000)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Domyślnie możesz się zalogować adresami e-mail takimi jak np. `test@example.com` (Hasło czy Provider ujęty w `auth.ts` nie stawia wymagań podczas implementacji testowej).
+Wewnątrz ustawień (Settings) załącz swój wygenerowany **Google Gemini API Key**. 
+
+## Tryb zoptymalizowany
+
+Do publikowania i instalacji na domowym NAS (np. host, OMV):
+```bash
+npm run build
+npm start
+```
